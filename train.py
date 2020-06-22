@@ -236,6 +236,8 @@ with tf.Graph().as_default():
             if len(arr)>0:
                 idx = vocab_processor.vocabulary_.get(w)
                 initW[idx]=np.asarray(arr).astype(np.float32)
+
+
         print("Done assigning intiW. len="+str(len(initW)))
         inpH.deletePreEmb()
         gc.collect()
