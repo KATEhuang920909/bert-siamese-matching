@@ -8,7 +8,6 @@
 """
 
 
-import numpy as np
 import re
 import itertools
 from collections import Counter
@@ -20,9 +19,6 @@ from gensim.models.word2vec import Word2Vec
 import gzip
 from random import random
 from utils.preprocess import MyVocabularyProcessor
-import sys
-reload(sys)
-sys.setdefaultencoding("utf-8")
 
 class InputHelper(object):
     pre_emb = dict()

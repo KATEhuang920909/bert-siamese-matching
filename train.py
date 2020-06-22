@@ -45,7 +45,7 @@ tf.flags.DEFINE_boolean("allow_soft_placement", True, "Allow device soft device 
 tf.flags.DEFINE_boolean("log_device_placement", False, "Log placement of ops on devices")
 
 FLAGS = tf.flags.FLAGS
-FLAGS._parse_flags()
+FLAGS.flag_values_dict()
 print("\nParameters:")
 for attr, value in sorted(FLAGS.__flags.items()):
     print("{}={}".format(attr.upper(), value))
@@ -73,6 +73,63 @@ else:
           "\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n")
     else:
         inpH.loadW2V(FLAGS.word2vec_model, FLAGS.word2vec_format)
+
+
+def train_step(x1_batch, x2_batch, y_batch):
+    """
+    A single training step
+    """
+    if random()>0.5:
+        feed_dict = {
+            siameseModel.input_x1: x1_batch,
+            siameseModel.input_x2: x2_batch,
+            siameseModel.input_y: y_batch,
+            siameseModel.dropout_keep_prob: FLAGS.dropout_keep_prob,
+        }
+    else:
+        feed_dict = {
+            siameseModel.input_x1: x2_batch,
+            siameseModel.input_x2: x1_batch,
+            siameseModel.input_y: y_batch,
+            siameseModel.dropout_keep_prob: FLAGS.dropout_keep_prob,
+        }
+    _, step, loss, accuracy, dist, sim, summaries = sess.run([tr_op_set,
+                                                              global_step,
+                                                              siameseModel.loss,
+                                                              siameseModel.accuracy,
+                                                              siameseModel.distance,
+                                                              siameseModel.temp_sim,
+                                                              train_summary_op],
+                                                             feed_dict)
+    time_str = datetime.datetime.now().isoformat()
+    print("TRAIN {}: step {}, loss {:g}, acc {:g}".format(time_str, step, loss, accuracy))
+    train_summary_writer.add_summary(summaries, step)
+    #(y_batch, dist, sim)
+
+def dev_step(x1_batch, x2_batch, y_batch):
+    """
+    A single training step
+    """
+    if random()>0.5:
+        feed_dict = {
+            siameseModel.input_x1: x1_batch,
+            siameseModel.input_x2: x2_batch,
+            siameseModel.input_y: y_batch,
+            siameseModel.dropout_keep_prob: 1.0,
+        }
+    else:
+        feed_dict = {
+            siameseModel.input_x1: x2_batch,
+            siameseModel.input_x2: x1_batch,
+            siameseModel.input_y: y_batch,
+            siameseModel.dropout_keep_prob: 1.0,
+        }
+    step, loss, accuracy, sim, summaries = sess.run([global_step, siameseModel.loss, siameseModel.accuracy, siameseModel.temp_sim, dev_summary_op],  feed_dict)
+    time_str = datetime.datetime.now().isoformat()
+    print("DEV {}: step {}, loss {:g}, acc {:g}".format(time_str, step, loss, accuracy))
+    dev_summary_writer.add_summary(summaries, step)
+    #print (y_batch, sim)
+    return accuracy
 
 # Training
 # ==================================================
@@ -109,7 +166,7 @@ with tf.Graph().as_default():
         print("initialized siameseModel object")
     
     grads_and_vars=optimizer.compute_gradients(siameseModel.loss)
-    tr_op_set = optimizer.apply_gradients(grads_and_vars, global_step=global_step)
+    tr_op_set = optimizer.apply_gradients(grads_and_vars, global_step=global_step)# global_step 将global+=1
     print("defined training_ops")
     # Keep track of gradient values and sparsity (optional)
     grad_summaries = []
@@ -182,56 +239,10 @@ with tf.Graph().as_default():
         print("Done assigning intiW. len="+str(len(initW)))
         inpH.deletePreEmb()
         gc.collect()
+        #把initW赋值给W
         sess.run(siameseModel.W.assign(initW))
 
-    def train_step(x1_batch, x2_batch, y_batch):
-        """
-        A single training step
-        """
-        if random()>0.5:
-            feed_dict = {
-                siameseModel.input_x1: x1_batch,
-                siameseModel.input_x2: x2_batch,
-                siameseModel.input_y: y_batch,
-                siameseModel.dropout_keep_prob: FLAGS.dropout_keep_prob,
-            }
-        else:
-            feed_dict = {
-                siameseModel.input_x1: x2_batch,
-                siameseModel.input_x2: x1_batch,
-                siameseModel.input_y: y_batch,
-                siameseModel.dropout_keep_prob: FLAGS.dropout_keep_prob,
-            }
-        _, step, loss, accuracy, dist, sim, summaries = sess.run([tr_op_set, global_step, siameseModel.loss, siameseModel.accuracy, siameseModel.distance, siameseModel.temp_sim, train_summary_op],  feed_dict)
-        time_str = datetime.datetime.now().isoformat()
-        print("TRAIN {}: step {}, loss {:g}, acc {:g}".format(time_str, step, loss, accuracy))
-        train_summary_writer.add_summary(summaries, step)
-        print(y_batch, dist, sim)
 
-    def dev_step(x1_batch, x2_batch, y_batch):
-        """
-        A single training step
-        """ 
-        if random()>0.5:
-            feed_dict = {
-                siameseModel.input_x1: x1_batch,
-                siameseModel.input_x2: x2_batch,
-                siameseModel.input_y: y_batch,
-                siameseModel.dropout_keep_prob: 1.0,
-            }
-        else:
-            feed_dict = {
-                siameseModel.input_x1: x2_batch,
-                siameseModel.input_x2: x1_batch,
-                siameseModel.input_y: y_batch,
-                siameseModel.dropout_keep_prob: 1.0,
-            }
-        step, loss, accuracy, sim, summaries = sess.run([global_step, siameseModel.loss, siameseModel.accuracy, siameseModel.temp_sim, dev_summary_op],  feed_dict)
-        time_str = datetime.datetime.now().isoformat()
-        print("DEV {}: step {}, loss {:g}, acc {:g}".format(time_str, step, loss, accuracy))
-        dev_summary_writer.add_summary(summaries, step)
-        print (y_batch, sim)
-        return accuracy
 
     # Generate batches
     batches=inpH.batch_iter(
@@ -240,7 +251,7 @@ with tf.Graph().as_default():
     ptr=0
     max_validation_acc=0.0
     for nn in range(sum_no_of_batches*FLAGS.num_epochs):
-        batch = batches.next()
+        batch = next(batches)
         if len(batch)<1:
             continue
         x1_batch,x2_batch, y_batch = zip(*batch)
@@ -266,4 +277,6 @@ with tf.Graph().as_default():
                 max_validation_acc = sum_acc
                 saver.save(sess, checkpoint_prefix, global_step=current_step)
                 tf.train.write_graph(sess.graph.as_graph_def(), checkpoint_prefix, "graph"+str(nn)+".pb", as_text=False)
-                print("Saved models {} with sum_accuracy={} checkpoint to {}\n".format(nn, max_validation_acc, checkpoint_prefix))
+                print("Saved models {} with sum_accuracy={} checkpoint to {}\n".format(nn,
+                                                                                       max_validation_acc,
+                                                                                       checkpoint_prefix))
