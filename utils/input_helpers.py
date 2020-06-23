@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
- @Time : 2020/6/17 22:37
+ @Time : 2020/6/17 22:33
  @Author : huangkai
  @File : input_helpers.py
  @Software: PyCharm
@@ -23,13 +23,13 @@ from utils.preprocess import MyVocabularyProcessor
 class InputHelper(object):
     pre_emb = dict()
     vocab_processor = None
-    def cleanText(self, s):
-        s = re.sub(r"[^\x00-\x7F]+"," ", s)
-        s = re.sub(r'[\~\!\`\^\*\{\}\[\]\#\<\>\?\+\=\-\_\(\)]+',"",s)
-        s = re.sub(r'( [0-9,\.]+)',r"\1 ", s)
-        s = re.sub(r'\$'," $ ", s)
-        s = re.sub('[ ]+',' ', s)
-        return s.lower()
+    # def cleanText(self, s):
+    #     s = re.sub(r"[^\x00-\x7F]+"," ", s)
+    #     s = re.sub(r'[\~\!\`\^\*\{\}\[\]\#\<\>\?\+\=\-\_\(\)]+',"",s)
+    #     s = re.sub(r'( [0-9,\.]+)',r"\1 ", s)
+    #     s = re.sub(r'\$'," $ ", s)
+    #     s = re.sub('[ ]+',' ', s)
+    #     return s.lower()
 
     def getVocab(self,vocab_path, max_document_length,filter_h_pad):
         if self.vocab_processor==None:
