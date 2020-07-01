@@ -13,9 +13,6 @@ from __future__ import print_function
 
 import re
 import numpy as np
-import six
-from tensorflow.contrib import learn
-from tensorflow.python.platform import gfile
 from tensorflow.contrib import learn  # pylint: disable=g-bad-import-order
 
 TOKENIZER_RE = re.compile(r"[A-Z]{2,}(?![a-z])|[A-Z][a-z]+(?=[A-Z])|[\'\w\-]+",

@@ -14,7 +14,7 @@ import time
 import datetime
 import gc
 from utils.input_helpers import InputHelper
-from models.siamese_network import SiameseLSTM
+from models.SiameseLSTM import SiameseLSTM
 from models.siamese_network_semantic import SiameseLSTMw2v
 from tensorflow.contrib import learn
 import gzip
@@ -33,9 +33,11 @@ tf.flags.DEFINE_string("args_name",
                         "is character based syntactic similarity. "
                         "if false then word embedding based semantic similarity is used."
                         "(default: True)")
+
 tf.flags.mark_flag_as_required("model_name")
 FLAGS=importlib.import_module('args.'+tf.flags.FLAGS.args_name).FLAGS
 FLAGS.flag_values_dict()
+
 print("\nParameters:")
 for attr, value in sorted(FLAGS.__flags.items()):
     print("{}={}".format(attr.upper(), value))
@@ -137,7 +139,6 @@ with tf.Graph().as_default():
                 vocab_size=len(vocab_processor.vocabulary_),
                 embedding_size=FLAGS.embedding_dim,
                 hidden_units=FLAGS.hidden_units,
-                l2_reg_lambda=FLAGS.l2_reg_lambda,
                 batch_size=FLAGS.batch_size
             )
         else:
