@@ -21,11 +21,11 @@ from __future__ import print_function
 import collections
 import csv
 import os
-from embedding.bert import modeling
+import Siamese_bert_model
 from embedding.bert import optimization
 from embedding.bert import tokenization
 import tensorflow as tf
-from SiameseLSTM import  SiameseLSTM
+from models.SiameseLSTM import  SiameseLSTM
 from SiameseLSTM_args import FLAGS
 flags = tf.flags
 
@@ -33,10 +33,6 @@ flags = tf.flags
 # Parameters
 # ==================================================
 
-print("\nParameters:")
-for attr, value in sorted(FLAGS.__flags.items()):
-    print("{}={}".format(attr.upper(), value))
-print("")
 
 
 class InputExample(object):
@@ -66,8 +62,7 @@ class InputFeatures(object):
     def __init__(self,
                  input_ids1,input_mask1,segment_ids1,
                  input_ids2,input_mask2,segment_ids2,
-                 label_id,
-                 is_real_example=True):
+                 label_id):
 
         self.input_ids1 = input_ids1
         self.input_mask1 = input_mask1
@@ -78,8 +73,6 @@ class InputFeatures(object):
         self.segment_ids2 = segment_ids2
 
         self.label_id = label_id
-
-        self.is_real_example = is_real_example
 
 
 class DataProcessor(object):
@@ -111,95 +104,6 @@ class DataProcessor(object):
                 lines.append(line)
             return lines
 
-
-class XnliProcessor(DataProcessor):
-    """Processor for the XNLI data set."""
-
-    def __init__(self):
-        self.language = "zh"
-
-    def get_train_examples(self, data_dir):
-        """See base class."""
-        lines = self._read_tsv(
-            os.path.join(data_dir, "multinli",
-                         "multinli.train.%s.tsv" % self.language))
-        examples = []
-        for (i, line) in enumerate(lines):
-            if i == 0:
-                continue
-            guid = "train-%d" % (i)
-            text_a = tokenization.convert_to_unicode(line[0])
-            text_b = tokenization.convert_to_unicode(line[1])
-            label = tokenization.convert_to_unicode(line[2])
-            if label == tokenization.convert_to_unicode("contradictory"):
-                label = tokenization.convert_to_unicode("contradiction")
-            examples.append(
-                InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
-        return examples
-
-    def get_dev_examples(self, data_dir):
-        """See base class."""
-        lines = self._read_tsv(os.path.join(data_dir, "xnli.dev.tsv"))
-        examples = []
-        for (i, line) in enumerate(lines):
-            if i == 0:
-                continue
-            guid = "dev-%d" % (i)
-            language = tokenization.convert_to_unicode(line[0])
-            if language != tokenization.convert_to_unicode(self.language):
-                continue
-            text_a = tokenization.convert_to_unicode(line[6])
-            text_b = tokenization.convert_to_unicode(line[7])
-            label = tokenization.convert_to_unicode(line[1])
-            examples.append(
-                InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
-        return examples
-
-    def get_labels(self):
-        """See base class."""
-        return ["contradiction", "entailment", "neutral"]
-
-
-class MnliProcessor(DataProcessor):
-    """Processor for the MultiNLI data set (GLUE version)."""
-
-    def get_train_examples(self, data_dir):
-        """See base class."""
-        return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
-
-    def get_dev_examples(self, data_dir):
-        """See base class."""
-        return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "dev_matched.tsv")),
-            "dev_matched")
-
-    def get_test_examples(self, data_dir):
-        """See base class."""
-        return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "test_matched.tsv")),
-            "test")
-
-    def get_labels(self):
-        """See base class."""
-        return ["contradiction", "entailment", "neutral"]
-
-    def _create_examples(self, lines, set_type):
-        """Creates examples for the training and dev sets."""
-        examples = []
-        for (i, line) in enumerate(lines):
-            if i == 0:
-                continue
-            guid = "%s-%s" % (set_type, tokenization.convert_to_unicode(line[0]))
-            text_a = tokenization.convert_to_unicode(line[8])
-            text_b = tokenization.convert_to_unicode(line[9])
-            if set_type == "test":
-                label = "contradiction"
-            else:
-                label = tokenization.convert_to_unicode(line[-1])
-            examples.append(
-                InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
-        return examples
 
 
 class MyProcessor(DataProcessor):
@@ -235,45 +139,6 @@ class MyProcessor(DataProcessor):
         return examples
 
 
-class ColaProcessor(DataProcessor):
-    """Processor for the CoLA data set (GLUE version)."""
-
-    def get_train_examples(self, data_dir):
-        """See base class."""
-        return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
-
-    def get_dev_examples(self, data_dir):
-        """See base class."""
-        return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "dev.tsv")), "dev")
-
-    def get_test_examples(self, data_dir):
-        """See base class."""
-        return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "test.tsv")), "test")
-
-    def get_labels(self):
-        """See base class."""
-        return ["0", "1"]
-
-    def _create_examples(self, lines, set_type):
-        """Creates examples for the training and dev sets."""
-        examples = []
-        for (i, line) in enumerate(lines):
-            # Only the test set has a header
-            if set_type == "test" and i == 0:
-                continue
-            guid = "%s-%s" % (set_type, i)
-            if set_type == "test":
-                text_a = tokenization.convert_to_unicode(line[1])
-                label = "0"
-            else:
-                text_a = tokenization.convert_to_unicode(line[3])
-                label = tokenization.convert_to_unicode(line[1])
-            examples.append(
-                InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
-        return examples
 
 
 def convert_single_sentence(tokens_input,  max_seq_length, tokenizer):
@@ -384,8 +249,7 @@ def convert_single_example(ex_index, example, label_list, max_seq_length,
         input_ids2=input_ids2,
         input_mask2=input_mask2,
         segment_ids2=segment_ids2,
-        label_id=label_id,
-        is_real_example=True)
+        label_id=label_id)
     return feature
 
 
@@ -431,7 +295,6 @@ def file_based_input_fn_builder(input_file, seq_length, is_training,
         "input_mask2": tf.FixedLenFeature([seq_length], tf.int64),
         "segment_ids2": tf.FixedLenFeature([seq_length], tf.int64),
         "label_ids": tf.FixedLenFeature([], tf.int64),
-        "is_real_example": tf.FixedLenFeature([], tf.int64),
     }
 
     def _decode_record(record, name_to_features):
@@ -491,17 +354,17 @@ def _truncate_seq_pair(tokens_a, tokens_b, max_length):
             tokens_b.pop()
 
 
-def contrastive_loss(y,d,batch_size):
-    tmp =  y*tf.square(d)
-    tmp2 = (1.0-y) *tf.square(tf.maximum((1.0 - d),0.0))
-    return tf.reduce_sum(tmp +tmp2)/batch_size/2.0
+def contrastive_loss(y,d):
+    tmp =  tf.div(y*tf.square(1.0 - d),4.0)
+    tmp2 = (1.0-y) *tf.square(d)
+    return tmp+tmp2
 
 def create_model(bert_config, is_training,
                  input_ids1, input_mask1, segment_ids1,
                  input_ids2, input_mask2, segment_ids2,
                  labels, num_labels, use_one_hot_embeddings):
     """Creates a classification model."""
-    model = modeling.BertModel(
+    model = Siamese_bert_model.BertModel(
         config=bert_config,
         is_training=is_training,
         input_ids1=input_ids1,
@@ -514,42 +377,38 @@ def create_model(bert_config, is_training,
 
     output1 = model.get_sequence_output1()#[batch_size, seq_length, embedding_size]
     output2 = model.get_sequence_output2()
+    print(output1.shape,output2.shape)
+    # 接入lstm层
+    model_layer = SiameseLSTM(output1,output2,FLAGS.hidden_units,FLAGS.dropout_keep_prob)
+    logits = model_layer.getLogits()
+    predict = logits
+    labels=tf.cast(labels,tf.float32)
+    with tf.name_scope("loss"):
+        print('label ,logits shape',labels.shape,logits.shape)
+        per_example_loss = contrastive_loss(labels, logits)#, FLAGS.batch_size)
+        loss=tf.reduce_sum(per_example_loss)
 
-    if FLAGS.model_type:
-        # 接入lstm层
-        model_layer = SiameseLSTM(output1,output2,FLAGS.hidden_units,FLAGS.dropout_keep_prob)
-        output = model_layer.getLogits()
-        labels=tf.cast(labels,tf.float32)
-        with tf.name_scope("loss"):
-            loss = contrastive_loss(labels, output, FLAGS.batch_size)
-        #### Accuracy computation is outside of this class.
-        with tf.name_scope("accuracy"):
-            temp_sim = tf.subtract(tf.ones_like(output), tf.rint(output),
-                                        name="temp_sim")  # auto threshold 0.5
-            correct_predictions = tf.equal(temp_sim, labels)
-            accuracy = tf.reduce_mean(tf.cast(correct_predictions, "float"), name="accuracy")
-
-        return (loss, loss,output,output)
-    else:
-        #将两个output拼接
-        output = tf.concat([tf.multiply(output1, output2), tf.abs(tf.subtract(output1, output2))], axis=-1)
-        # output = tf.concat([output1, output2], axis=-1)
-
-        with tf.variable_scope("bert_output_binary_cls"):
-            intermediate_output = tf.layers.dense(output, 256, activation=tf.nn.relu)
-            if is_training:
-                intermediate_output = tf.nn.dropout(intermediate_output, keep_prob=0.9)
-            logits = tf.layers.dense(intermediate_output, 1)
-            logits = tf.reshape(logits, [-1])
-            predict = tf.nn.sigmoid(logits)
-
-        labels = tf.cast(labels, tf.float32)
-        with tf.variable_scope("loss"):
-            per_example_loss = tf.nn.sigmoid_cross_entropy_with_logits(logits=logits, labels=labels)
-            loss = tf.reduce_mean(per_example_loss)
-
-
-            return (loss, per_example_loss, logits, predict)
+    return (loss, per_example_loss,logits,predict)
+    # else:
+    #     #将两个output拼接
+    #     output = tf.concat([tf.multiply(output1, output2), tf.abs(tf.subtract(output1, output2))], axis=-1)
+    #     # output = tf.concat([output1, output2], axis=-1)
+    #
+    #     with tf.variable_scope("bert_output_binary_cls"):
+    #         intermediate_output = tf.layers.dense(output, 256, activation=tf.nn.relu)
+    #         if is_training:
+    #             intermediate_output = tf.nn.dropout(intermediate_output, keep_prob=0.9)
+    #         logits = tf.layers.dense(intermediate_output, 1)
+    #         logits = tf.reshape(logits, [-1])
+    #         predict = tf.nn.sigmoid(logits)
+    #
+    #     labels = tf.cast(labels, tf.float32)
+    #     with tf.variable_scope("loss"):
+    #         per_example_loss = tf.nn.sigmoid_cross_entropy_with_logits(logits=logits, labels=labels)
+    #         loss = tf.reduce_mean(per_example_loss)
+    #
+    #
+    #         return (loss, per_example_loss, logits, predict)
 
 
 
@@ -585,13 +444,18 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
             input_ids2, input_mask2, segment_ids2,
             label_ids,
             num_labels, use_one_hot_embeddings)
+        print("total_loss::", total_loss)
+        print("per_example_loss::", per_example_loss)
+        print("logits::", logits)
+        print("probabilities::", probabilities)
+
 
         tvars = tf.trainable_variables()
 
         scaffold_fn = None
         if init_checkpoint:
             (assignment_map, initialized_variable_names
-             ) = modeling.get_assignment_map_from_checkpoint(tvars, init_checkpoint)
+             ) = Siamese_bert_model.get_assignment_map_from_checkpoint(tvars, init_checkpoint)
             if use_tpu:
 
                 def tpu_scaffold():
@@ -615,12 +479,17 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
 
             train_op = optimization.create_optimizer(
                 total_loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu)
-
+            show_dict = {
+                "total_loss": total_loss,
+            }
+            logging_hook = tf.train.LoggingTensorHook(show_dict, every_n_iter=100)
+            #logging_hook = tf.train.LoggingTensorHook({"total_loss:": total_loss}, every_n_iter=10)
             output_spec = tf.contrib.tpu.TPUEstimatorSpec(
                 mode=mode,
                 loss=total_loss,
                 train_op=train_op,
-                scaffold_fn=scaffold_fn)
+                scaffold_fn=scaffold_fn,
+                training_hooks=[logging_hook])
         elif mode == tf.estimator.ModeKeys.EVAL:
 
             def metric_fn(per_example_loss, label_ids, probabilities):
@@ -684,7 +553,8 @@ def input_fn_builder(features, seq_length, is_training, drop_remainder):
         d = tf.data.Dataset.from_tensor_slices({
             "input_ids1":
                 tf.constant(
-                    all_input_ids1, shape=[num_examples, seq_length],
+                    all_input_ids1,
+                    shape=[num_examples, seq_length],
                     dtype=tf.int32),
             "input_mask1":
                 tf.constant(
@@ -698,7 +568,8 @@ def input_fn_builder(features, seq_length, is_training, drop_remainder):
                     dtype=tf.int32),
             "input_ids2":
                 tf.constant(
-                    all_input_ids2, shape=[num_examples, seq_length],
+                    all_input_ids2,
+                    shape=[num_examples, seq_length],
                     dtype=tf.int32),
             "input_mask2":
                 tf.constant(
@@ -711,14 +582,19 @@ def input_fn_builder(features, seq_length, is_training, drop_remainder):
                     shape=[num_examples, seq_length],
                     dtype=tf.int32),
             "label_ids":
-                tf.constant(all_label_ids, shape=[num_examples], dtype=tf.int32),
+                tf.constant(
+                    all_label_ids,
+                    shape=[num_examples],
+                    dtype=tf.int32),
         })
 
         if is_training:
             d = d.repeat()
             d = d.shuffle(buffer_size=100)
 
-        d = d.batch(batch_size=batch_size, drop_remainder=drop_remainder)
+        d = d.batch(
+            batch_size=batch_size,
+            drop_remainder=drop_remainder)
         return d
 
     return input_fn
@@ -746,17 +622,14 @@ def main(_):
     tf.logging.set_verbosity(tf.logging.INFO)
 
     processors = {
-        "cola": ColaProcessor,
-        "mnli": MnliProcessor,
         "sim": MyProcessor,
-        "xnli": XnliProcessor,
     }
 
     if not FLAGS.do_train and not FLAGS.do_eval and not FLAGS.do_predict:
         raise ValueError(
             "At least one of `do_train`, `do_eval` or `do_predict' must be True.")
 
-    bert_config = modeling.BertConfig.from_json_file(FLAGS.bert_config_file)
+    bert_config = Siamese_bert_model.BertConfig.from_json_file(FLAGS.bert_config_file)
 
     if FLAGS.max_seq_length > bert_config.max_position_embeddings:
         raise ValueError(
@@ -776,7 +649,8 @@ def main(_):
     label_list = processor.get_labels()
 
     tokenizer = tokenization.FullTokenizer(
-        vocab_file=FLAGS.vocab_file, do_lower_case=FLAGS.do_lower_case)
+        vocab_file=FLAGS.vocab_file,
+        do_lower_case=FLAGS.do_lower_case)
 
     tpu_cluster_resolver = None
     if FLAGS.use_tpu and FLAGS.tpu_name:
