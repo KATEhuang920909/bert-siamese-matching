@@ -33,12 +33,10 @@ class SiameseLSTM(object):
             # pooled_len_1 = tf.sqrt(tf.reduce_sum(tf.square(out1), 1))
             # pooled_len_2 = tf.sqrt(tf.reduce_sum(tf.square(out2), 1))
             # pooled_mul_12 = tf.reduce_sum(out1 *out2, 1)
-            self.distance=self.get_cos_distance(out1,out2)
+            self.output = tf.concat([tf.multiply(out1, out2), tf.abs(tf.subtract(out1, out2))], axis=-1)
            # self.distance = tf.reshape(distance, [-1], name="distance")
-            print('distance_shape:',self.distance.shape)
+            print('distance_shape:',self.output.shape)
 
-    def getLogits(self):
-        return self.distance
         # with tf.name_scope("loss"):
         #     self.loss = self.contrastive_loss(self.input_y, self.distance, batch_size)
         # #### Accuracy computation is outside of this class.
@@ -90,23 +88,23 @@ class SiameseLSTM(object):
         # max_pooling层
         with tf.name_scope("max_pooling"):
             fc = tf.layers.dense(y2, hidden_units, activation=tf.nn.relu)
-            self.output = tf.reduce_max(fc, axis=1)
-            print("output shape:",self.output.shape)
-        return self.output
-    def get_cos_distance(self,X1, X2):
-        # calculate cos distance between two sets
-        # more similar more big
-        (k, n) = X1.shape
-        (m, n) = X2.shape
-        # 求模
-        X1_norm = tf.sqrt(tf.reduce_sum(tf.square(X1), axis=1))
-        X2_norm = tf.sqrt(tf.reduce_sum(tf.square(X2), axis=1))
-        # 内积
-        X1_X2 = tf.reduce_sum(tf.multiply(X1, X2),axis=1)
-        print('x1_x2 ',X1_X2.shape)
-        print('x1_norm ', X1_norm.shape)
-        print('x2_norm ', X2_norm.shape)
-        X1_X2_norm = tf.multiply(tf.reshape(X1_norm, [k,1]), tf.reshape(X2_norm, [m, 1]))
-        # 计算余弦距离
-        cos = tf.reshape(X1_X2, [k,-1])/ X1_X2_norm
-        return cos
+            output = tf.reduce_max(fc, axis=1)
+            print("output shape:",output.shape)
+        return output
+    # def get_cos_distance(self,X1, X2):
+    #     # calculate cos distance between two sets
+    #     # more similar more big
+    #     (k, n) = X1.shape
+    #     (m, n) = X2.shape
+    #     # 求模
+    #     X1_norm = tf.sqrt(tf.reduce_sum(tf.square(X1), axis=1))
+    #     X2_norm = tf.sqrt(tf.reduce_sum(tf.square(X2), axis=1))
+    #     # 内积
+    #     X1_X2 = tf.reduce_sum(tf.multiply(X1, X2),axis=1)
+    #     print('x1_x2 ',X1_X2.shape)
+    #     print('x1_norm ', X1_norm.shape)
+    #     print('x2_norm ', X2_norm.shape)
+    #     X1_X2_norm = tf.multiply(tf.reshape(X1_norm, [-1,1]), tf.reshape(X2_norm, [-1, 1]))
+    #     # 计算余弦距离
+    #     cos = X1_X2/ X1_X2_norm
+    #     return cos

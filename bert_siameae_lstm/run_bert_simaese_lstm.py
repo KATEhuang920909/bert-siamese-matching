@@ -380,13 +380,23 @@ def create_model(bert_config, is_training,
     print(output1.shape,output2.shape)
     # 接入lstm层
     model_layer = SiameseLSTM(output1,output2,FLAGS.hidden_units,FLAGS.dropout_keep_prob)
-    logits = model_layer.getLogits()
-    predict = logits
-    labels=tf.cast(labels,tf.float32)
+    output = model_layer.output
+    with tf.name_scope("bert_output_binary_cls"):
+        intermediate_output = tf.layers.dense(output, 256, activation=tf.nn.relu)
+        if is_training:
+            intermediate_output = tf.nn.dropout(intermediate_output, keep_prob=0.9)
+        logits = tf.layers.dense(intermediate_output, 1)
+        logits = tf.reshape(logits, [-1])
+        predict = tf.nn.sigmoid(logits)
+
+    labels = tf.cast(labels, tf.float32)
     with tf.name_scope("loss"):
         print('label ,logits shape',labels.shape,logits.shape)
         per_example_loss = contrastive_loss(labels, logits)#, FLAGS.batch_size)
         loss=tf.reduce_sum(per_example_loss)
+    # with tf.variable_scope("loss"):
+    #     per_example_loss = tf.nn.sigmoid_cross_entropy_with_logits(logits=logits, labels=labels)
+    #     loss = tf.reduce_mean(per_example_loss)
 
     return (loss, per_example_loss,logits,predict)
     # else:
@@ -476,11 +486,14 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
 
         output_spec = None
         if mode == tf.estimator.ModeKeys.TRAIN:
-
+            correct_predictions = tf.equal(tf.cast(tf.rint(probabilities),tf.int32), label_ids)
+            accuracy = tf.reduce_mean(tf.cast(correct_predictions, "float"), name="accuracy")
+            tf.summary.scalar('accuracy', accuracy)
             train_op = optimization.create_optimizer(
                 total_loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu)
             show_dict = {
                 "total_loss": total_loss,
+                'accuracy':accuracy
             }
             logging_hook = tf.train.LoggingTensorHook(show_dict, every_n_iter=10)
             #logging_hook = tf.train.LoggingTensorHook({"total_loss:": total_loss}, every_n_iter=10)
