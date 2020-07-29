@@ -121,7 +121,7 @@ class MyProcessor(DataProcessor):
 
     def get_labels(self):
         """See base class."""
-        return [0, 1]
+        return ["0", "1"]
 
     def _create_examples(self, lines, set_type):
         """Creates examples for the training and dev sets."""
@@ -131,9 +131,9 @@ class MyProcessor(DataProcessor):
                 continue
             guid = "%s-%s" % (set_type, i)
 
-            text_a = tokenization.convert_to_unicode(line[1])
-            text_b = tokenization.convert_to_unicode(line[2])
-            label = tokenization.convert_to_unicode(line[3])
+            text_a = tokenization.convert_to_unicode(line[0])
+            text_b = tokenization.convert_to_unicode(line[1])
+            label = tokenization.convert_to_unicode(line[2])
             examples.append(
                 InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
