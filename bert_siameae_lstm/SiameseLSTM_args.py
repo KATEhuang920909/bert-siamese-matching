@@ -50,7 +50,7 @@ tf.flags.DEFINE_float("l2_reg_lambda",
 
 
 tf.flags.DEFINE_integer("hidden_units",
-                        256,
+                        64,
                         "Number of hidden units (default:50)")
 
 # Training parameters

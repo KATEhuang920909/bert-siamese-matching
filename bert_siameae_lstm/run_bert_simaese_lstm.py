@@ -354,10 +354,7 @@ def _truncate_seq_pair(tokens_a, tokens_b, max_length):
             tokens_b.pop()
 
 
-def contrastive_loss(y,d):
-    tmp =  tf.div(y*tf.square(1.0 - d),4.0)
-    tmp2 = (1.0-y) *tf.square(d)
-    return tmp+tmp2
+
 
 def create_model(bert_config, is_training,
                  input_ids1, input_mask1, segment_ids1,
@@ -380,25 +377,25 @@ def create_model(bert_config, is_training,
     print(output1.shape,output2.shape)
     # 接入lstm层
     model_layer = SiameseLSTM(output1,output2,FLAGS.hidden_units,FLAGS.dropout_keep_prob)
-    output = model_layer.output
-    with tf.name_scope("bert_output_binary_cls"):
-        intermediate_output = tf.layers.dense(output, 256, activation=tf.nn.relu)
-        if is_training:
-            intermediate_output = tf.nn.dropout(intermediate_output, keep_prob=0.9)
-        logits = tf.layers.dense(intermediate_output, 1)
-        logits = tf.reshape(logits, [-1])
-        predict = tf.nn.sigmoid(logits)
+    distance = model_layer.distance
 
     labels = tf.cast(labels, tf.float32)
+
+    def contrastive_loss(y, d):
+        tmp = (1-y) * tf.square(d)
+        # tmp= tf.mul(y,tf.square(d))
+        tmp2 = y * tf.square(tf.maximum((1 - d), 0))
+        return tmp+tmp2
+
     with tf.name_scope("loss"):
-        print('label ,logits shape',labels.shape,logits.shape)
-        per_example_loss = contrastive_loss(labels, logits)#, FLAGS.batch_size)
+        print('label ,logits shape',labels.shape,distance.shape)
+        per_example_loss = contrastive_loss(labels, distance)#, FLAGS.batch_size)
         loss=tf.reduce_sum(per_example_loss)
     # with tf.variable_scope("loss"):
     #     per_example_loss = tf.nn.sigmoid_cross_entropy_with_logits(logits=logits, labels=labels)
     #     loss = tf.reduce_mean(per_example_loss)
 
-    return (loss, per_example_loss,logits,predict)
+    return (loss, per_example_loss,distance)
     # else:
     #     #将两个output拼接
     #     output = tf.concat([tf.multiply(output1, output2), tf.abs(tf.subtract(output1, output2))], axis=-1)
@@ -448,7 +445,7 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
 
         is_training = (mode == tf.estimator.ModeKeys.TRAIN)
 
-        (total_loss, per_example_loss, logits, probabilities) = create_model(
+        (total_loss, per_example_loss,  probabilities) = create_model(
             bert_config, is_training,
             input_ids1, input_mask1, segment_ids1,
             input_ids2, input_mask2, segment_ids2,
@@ -456,7 +453,6 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
             num_labels, use_one_hot_embeddings)
         print("total_loss::", total_loss)
         print("per_example_loss::", per_example_loss)
-        print("logits::", logits)
         print("probabilities::", probabilities)
 
 
@@ -668,7 +664,7 @@ def main(_):
     tpu_cluster_resolver = None
     if FLAGS.use_tpu and FLAGS.tpu_name:
         tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
-            FLAGS.tpu_name, zone=FLAGS.tpu_zone, project=FLAGS.gcp_project)
+            FLAGS.tpu_name, zone=FLAGS .tpu_zone, project=FLAGS.gcp_project)
 
     is_per_host = tf.contrib.tpu.InputPipelineConfig.PER_HOST_V2
     run_config = tf.contrib.tpu.RunConfig(
