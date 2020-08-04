@@ -2,7 +2,7 @@
 """
  @Time : 2020/6/23 21:36
  @Author : huangkai
- @File : SiameseLSTM_args.py
+ @File : args.py
  @Software: PyCharm
 
 """
@@ -101,7 +101,7 @@ flags.DEFINE_string(
 ## Other parameters
 
 flags.DEFINE_string(
-    "init_checkpoint", None,
+    "init_checkpoint", 'embedding/chinese_L-12_H-768_A-12/bert_model.ckpt',
     "Initial checkpoint (usually from a pre-trained BERT model).")
 
 flags.DEFINE_bool(

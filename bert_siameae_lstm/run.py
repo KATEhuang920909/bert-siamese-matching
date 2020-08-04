@@ -21,12 +21,12 @@ from __future__ import print_function
 import collections
 import csv
 import os
-import Siamese_bert_model
+import siamese_bert_model
 from embedding.bert import optimization
 from embedding.bert import tokenization
 import tensorflow as tf
 from models.SiameseLSTM import  SiameseLSTM
-from SiameseLSTM_args import FLAGS
+from args import FLAGS
 flags = tf.flags
 
 ## Required parameters
@@ -361,7 +361,7 @@ def create_model(bert_config, is_training,
                  input_ids2, input_mask2, segment_ids2,
                  labels, num_labels, use_one_hot_embeddings):
     """Creates a classification model."""
-    model = Siamese_bert_model.BertModel(
+    model = siamese_bert_model.BertModel(
         config=bert_config,
         is_training=is_training,
         input_ids1=input_ids1,
@@ -461,7 +461,7 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
         scaffold_fn = None
         if init_checkpoint:
             (assignment_map, initialized_variable_names
-             ) = Siamese_bert_model.get_assignment_map_from_checkpoint(tvars, init_checkpoint)
+             ) = siamese_bert_model.get_assignment_map_from_checkpoint(tvars, init_checkpoint)
             if use_tpu:
 
                 def tpu_scaffold():
@@ -638,7 +638,7 @@ def main(_):
         raise ValueError(
             "At least one of `do_train`, `do_eval` or `do_predict' must be True.")
 
-    bert_config = Siamese_bert_model.BertConfig.from_json_file(FLAGS.bert_config_file)
+    bert_config = siamese_bert_model.BertConfig.from_json_file(FLAGS.bert_config_file)
 
     if FLAGS.max_seq_length > bert_config.max_position_embeddings:
         raise ValueError(

@@ -2,7 +2,7 @@
 """
  @Time : 2020/7/11 20:16
  @Author : huangkai
- @File : Siamese_bert_model.py
+ @File : siamese_bert_model.py
  @Software: PyCharm 
  
 """
