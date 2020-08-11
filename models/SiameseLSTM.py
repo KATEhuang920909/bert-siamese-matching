@@ -26,16 +26,18 @@ class SiameseLSTM(object):
             out1 = self.BiRNN(embedding1, dropout_keep_prob, "side1", hidden_units)
             out2 = self.BiRNN(embedding2, dropout_keep_prob, "side2",  hidden_units)
             print(out1.shape,out2.shape)
-            self.distance = tf.sqrt(tf.reduce_sum(tf.square(tf.subtract(out1, out2)), 1, keep_dims=True))
-            self.distance = tf.div(self.distance,
-                                   tf.add(tf.sqrt(tf.reduce_sum(tf.square(out1), 1, keep_dims=True)),
-                                          tf.sqrt(tf.reduce_sum(tf.square(out2), 1, keep_dims=True))))
-            # pooled_len_1 = tf.sqrt(tf.reduce_sum(tf.square(out1), 1))
-            # pooled_len_2 = tf.sqrt(tf.reduce_sum(tf.square(out2), 1))
-            # pooled_mul_12 = tf.reduce_sum(out1 *out2, 1)
-            # self.output = tf.concat([tf.multiply(out1, out2), tf.abs(tf.subtract(out1, out2))], axis=-1)
-            self.distance = tf.reshape(self.distance, [-1], name="distance")
-            print('distance_shape:',self.distance.shape)
+            self.output = tf.concat([tf.multiply(out1, out2), tf.abs(tf.subtract(out1, out2))], axis=-1)
+            print(self.output.shape)
+            # self.distance = tf.sqrt(tf.reduce_sum(tf.square(tf.subtract(out1, out2)), 1, keep_dims=True))
+            # self.distance = tf.div(self.distance,
+            #                        tf.add(tf.sqrt(tf.reduce_sum(tf.square(out1), 1, keep_dims=True)),
+            #                               tf.sqrt(tf.reduce_sum(tf.square(out2), 1, keep_dims=True))))
+            # # pooled_len_1 = tf.sqrt(tf.reduce_sum(tf.square(out1), 1))
+            # # pooled_len_2 = tf.sqrt(tf.reduce_sum(tf.square(out2), 1))
+            # # pooled_mul_12 = tf.reduce_sum(out1 *out2, 1)
+            # # self.output = tf.concat([tf.multiply(out1, out2), tf.abs(tf.subtract(out1, out2))], axis=-1)
+            # self.distance = tf.reshape(self.distance, [-1], name="distance")
+            # print('distance_shape:',self.distance.shape)
 
 
         # #### Accuracy computation is outside of this class.

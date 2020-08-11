@@ -25,6 +25,7 @@ import siamese_bert_model
 from embedding.bert import optimization
 from embedding.bert import tokenization
 import tensorflow as tf
+import shutil
 from models.SiameseLSTM import  SiameseLSTM
 from args import FLAGS
 flags = tf.flags
@@ -97,11 +98,12 @@ class DataProcessor(object):
     @classmethod
     def _read_tsv(cls, input_file, quotechar=None):
         """Reads a tab separated value file."""
-        with tf.gfile.Open(input_file, "r") as f:
-            reader = csv.reader(f, delimiter=",",quotechar=quotechar)
-            lines = []
-            for line in reader:
-                lines.append(line)
+        lines=[]
+        with open(input_file, encoding="utf-8") as f:
+            texts= f.readlines()
+            for line in texts:
+                if '"' not in line:
+                    lines.append(line.strip().split(","))
             return lines
 
 
@@ -377,25 +379,32 @@ def create_model(bert_config, is_training,
     print(output1.shape,output2.shape)
     # 接入lstm层
     model_layer = SiameseLSTM(output1,output2,FLAGS.hidden_units,FLAGS.dropout_keep_prob)
-    distance = model_layer.distance
+    output = model_layer.output
 
+    with tf.name_scope("out"):
+        intermediate_output = tf.layers.dense(output, 256, activation=tf.nn.relu)
+        if is_training:
+            intermediate_output = tf.nn.dropout(intermediate_output, keep_prob=0.9)
+        logits = tf.layers.dense(intermediate_output, 1)
+        logits = tf.reshape(logits, [-1])
+        predict = tf.nn.sigmoid(logits)
     labels = tf.cast(labels, tf.float32)
 
-    def contrastive_loss(y, d):
-        tmp = (1-y) * tf.square(d)
-        # tmp= tf.mul(y,tf.square(d))
-        tmp2 = y * tf.square(tf.maximum((1 - d), 0))
-        return tmp+tmp2
+    # def contrastive_loss(y, d):
+    #     tmp = (1-y) * tf.square(d)
+    #     # tmp= tf.mul(y,tf.square(d))
+    #     tmp2 = y * tf.square(tf.maximum((1 - d), 0))
+    #     return tmp+tmp2
 
+    # with tf.name_scope("loss"):
+    #     print('label ,logits shape',labels.shape,distance.shape)
+    #     per_example_loss = contrastive_loss(labels, distance)#, FLAGS.batch_size)
+    #     loss=tf.reduce_sum(per_example_loss)
     with tf.name_scope("loss"):
-        print('label ,logits shape',labels.shape,distance.shape)
-        per_example_loss = contrastive_loss(labels, distance)#, FLAGS.batch_size)
-        loss=tf.reduce_sum(per_example_loss)
-    # with tf.variable_scope("loss"):
-    #     per_example_loss = tf.nn.sigmoid_cross_entropy_with_logits(logits=logits, labels=labels)
-    #     loss = tf.reduce_mean(per_example_loss)
+        per_example_loss = tf.nn.sigmoid_cross_entropy_with_logits(logits=logits, labels=labels)
+        loss = tf.reduce_mean(per_example_loss)
 
-    return (loss, per_example_loss,distance)
+        return (loss, per_example_loss, logits, predict)
     # else:
     #     #将两个output拼接
     #     output = tf.concat([tf.multiply(output1, output2), tf.abs(tf.subtract(output1, output2))], axis=-1)
@@ -445,7 +454,7 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
 
         is_training = (mode == tf.estimator.ModeKeys.TRAIN)
 
-        (total_loss, per_example_loss,  probabilities) = create_model(
+        (total_loss, per_example_loss, logits, probabilities) = create_model(
             bert_config, is_training,
             input_ids1, input_mask1, segment_ids1,
             input_ids2, input_mask2, segment_ids2,
@@ -453,6 +462,7 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
             num_labels, use_one_hot_embeddings)
         print("total_loss::", total_loss)
         print("per_example_loss::", per_example_loss)
+        print("logits::", logits)
         print("probabilities::", probabilities)
 
 
@@ -482,14 +492,14 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
 
         output_spec = None
         if mode == tf.estimator.ModeKeys.TRAIN:
-            correct_predictions = tf.equal(tf.cast(tf.rint(probabilities),tf.int32), label_ids)
-            accuracy = tf.reduce_mean(tf.cast(correct_predictions, "float"), name="accuracy")
+            predictions = tf.cast(probabilities > 0.5, tf.int32)
+            accuracy = tf.metrics.accuracy(label_ids, predictions, name="accuracy")
             tf.summary.scalar('accuracy', accuracy)
             train_op = optimization.create_optimizer(
                 total_loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu)
             show_dict = {
                 "total_loss": total_loss,
-                'accuracy':accuracy
+                # 'accuracy':accuracy
             }
             logging_hook = tf.train.LoggingTensorHook(show_dict, every_n_iter=10)
             #logging_hook = tf.train.LoggingTensorHook({"total_loss:": total_loss}, every_n_iter=10)
@@ -707,6 +717,8 @@ def main(_):
         predict_batch_size=FLAGS.predict_batch_size)
 
     if FLAGS.do_train:
+        shutil.rmtree(FLAGS.output_dir)  # 将整个文件夹删除
+        os.makedirs(FLAGS.output_dir)  # 重新创建文件夹
         train_file = os.path.join(FLAGS.output_dir, "train.tf_record")
         file_based_convert_examples_to_features(
             train_examples, label_list, FLAGS.max_seq_length, tokenizer, train_file)
@@ -719,9 +731,6 @@ def main(_):
             seq_length=FLAGS.max_seq_length,
             is_training=True,
             drop_remainder=True)
-        estimator.train(input_fn=train_input_fn, max_steps=num_train_steps)
-
-    if FLAGS.do_eval:
         eval_examples = processor.get_dev_examples(FLAGS.data_dir)
         eval_file = os.path.join(FLAGS.output_dir, "eval.tf_record")
         file_based_convert_examples_to_features(
@@ -731,15 +740,6 @@ def main(_):
         tf.logging.info("  Num examples = %d", len(eval_examples))
         tf.logging.info("  Batch size = %d", FLAGS.eval_batch_size)
 
-        # This tells the estimator to run through the entire set.
-        eval_steps = None
-        # However, if running eval on the TPU, you will need to specify the
-        # number of steps.
-        if FLAGS.use_tpu:
-            # Eval will be slightly WRONG on the TPU because it will truncate
-            # the last batch.
-            eval_steps = int(len(eval_examples) / FLAGS.eval_batch_size)
-
         eval_drop_remainder = True if FLAGS.use_tpu else False
         eval_input_fn = file_based_input_fn_builder(
             input_file=eval_file,
@@ -747,15 +747,38 @@ def main(_):
             is_training=False,
             drop_remainder=eval_drop_remainder)
 
-        result = estimator.evaluate(input_fn=eval_input_fn, steps=eval_steps)
+        #  train part
+        best_val_loss = 10000.0
+        no_best_num = 0
+        for i in range(1, int(FLAGS.num_train_epochs + 1)):
+            train_steps = int(len(train_examples) / FLAGS.train_batch_size) * i
 
-        output_eval_file = os.path.join(FLAGS.output_dir, "eval_results.txt")
-        with tf.gfile.GFile(output_eval_file, "w") as writer:
-            tf.logging.info("***** Eval results *****")
-            for key in sorted(result.keys()):
-                tf.logging.info("  %s = %s", key, str(result[key]))
-                writer.write("%s = %s\n" % (key, str(result[key])))
+            tf.logging.info("Run train %d epoch..." % i)
+            tf.logging.info("train step %d ..." % train_steps)
 
+            estimator.train(input_fn=train_input_fn, max_steps=train_steps)
+            result = estimator.evaluate(input_fn=eval_input_fn)
+
+            output_eval_file = os.path.join(FLAGS.output_dir, "eval_results.txt")
+            with tf.gfile.GFile(output_eval_file, "a") as writer:
+                tf.logging.info("***** Eval results %d round...*****" % i)
+                writer.write("***** Eval results %d round...*****\n" % i)
+                for key in sorted(result.keys()):
+                    tf.logging.info("  %s = %s", key, str(result[key]))
+                    writer.write("%s = %s\n" % (key, str(result[key])))
+
+                eval_loss = result["eval_loss"]
+
+            if eval_loss < best_val_loss:
+                best_val_loss = eval_loss
+                no_best_num = 0
+            else:
+                no_best_num += 1
+
+            if no_best_num >= 2:
+                tf.logging.info("has no better loss after 2 round...")
+                tf.logging.info("end...")
+                break
     if FLAGS.do_predict:
         predict_examples = processor.get_test_examples(FLAGS.data_dir)
         predict_file = os.path.join(FLAGS.output_dir, "predict.tf_record")
@@ -789,4 +812,9 @@ def main(_):
 
 
 if __name__ == "__main__":
+    # flags.mark_flag_as_required("data_dir")
+    # flags.mark_flag_as_required("task_name")
+    # flags.mark_flag_as_required("vocab_file")
+    # flags.mark_flag_as_required("bert_config_file")
+    # flags.mark_flag_as_required("output_dir")
     tf.app.run()
