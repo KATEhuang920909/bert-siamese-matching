@@ -19,21 +19,22 @@ from __future__ import division
 from __future__ import print_function
 
 import collections
-import csv
+import pandas as pd
 import os
 import siamese_bert_model
 from embedding.bert import optimization
 from embedding.bert import tokenization
 import tensorflow as tf
 import shutil
-from models.SiameseLSTM import  SiameseLSTM
+from models.SiameseLSTM import SiameseLSTM
 from args import FLAGS
+
 flags = tf.flags
+
 
 ## Required parameters
 # Parameters
 # ==================================================
-
 
 
 class InputExample(object):
@@ -61,10 +62,9 @@ class InputFeatures(object):
     """A single set of features of data."""
 
     def __init__(self,
-                 input_ids1,input_mask1,segment_ids1,
-                 input_ids2,input_mask2,segment_ids2,
+                 input_ids1, input_mask1, segment_ids1,
+                 input_ids2, input_mask2, segment_ids2,
                  label_id):
-
         self.input_ids1 = input_ids1
         self.input_mask1 = input_mask1
         self.segment_ids1 = segment_ids1
@@ -98,14 +98,9 @@ class DataProcessor(object):
     @classmethod
     def _read_tsv(cls, input_file, quotechar=None):
         """Reads a tab separated value file."""
-        lines=[]
-        with open(input_file, encoding="utf-8") as f:
-            texts= f.readlines()
-            for line in texts:
-                if '"' not in line:
-                    lines.append(line.strip().split(","))
-            return lines
+        data=pd.read_csv(input_file)
 
+        return data
 
 
 class MyProcessor(DataProcessor):
@@ -121,29 +116,30 @@ class MyProcessor(DataProcessor):
         return self._create_examples(
             self._read_tsv(os.path.join(data_dir, "dev.csv")), "dev")
 
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(
+            self._read_tsv(os.path.join(data_dir, "test.csv")), "test")
+
     def get_labels(self):
         """See base class."""
         return ["0", "1"]
 
-    def _create_examples(self, lines, set_type):
+    def _create_examples(self, data, set_type):
         """Creates examples for the training and dev sets."""
         examples = []
-        for (i, line) in enumerate(lines):
-            if i == 0:
-                continue
-            guid = "%s-%s" % (set_type, i)
+        for index,lines in data.iterrows():
+            guid = "%s-%s" % (set_type, index)
 
-            text_a = tokenization.convert_to_unicode(line[0])
-            text_b = tokenization.convert_to_unicode(line[1])
-            label = tokenization.convert_to_unicode(line[2])
+            text_a = tokenization.convert_to_unicode(lines[0])
+            text_b = tokenization.convert_to_unicode(lines[1])
+            label = tokenization.convert_to_unicode(str(lines[2]))
             examples.append(
                 InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
 
 
-
-
-def convert_single_sentence(tokens_input,  max_seq_length, tokenizer):
+def convert_single_sentence(tokens_input, max_seq_length, tokenizer):
     tokens = []
     segment_ids = []
     tokens.append("[CLS]")
@@ -220,14 +216,13 @@ def convert_single_example(ex_index, example, label_list, max_seq_length,
     # For classification tasks, the first vector (corresponding to [CLS]) is
     # used as as the "sentence vector". Note that this only makes sense because
     # the entire model is fine-tuned.
-    #tokens=["[CLS]",0,0,...,"[SEP",1,1,1,...,1,"[SEP"]
+    # tokens=["[CLS]",0,0,...,"[SEP",1,1,1,...,1,"[SEP"]
     label_id = label_map[example.label]
-    input_ids1, input_mask1, segment_ids1 = convert_single_sentence(tokens_a, max_seq_length,tokenizer)
-    input_ids2, input_mask2, segment_ids2 = convert_single_sentence(tokens_b, max_seq_length,tokenizer)
-
+    input_ids1, input_mask1, segment_ids1 = convert_single_sentence(tokens_a, max_seq_length, tokenizer)
+    input_ids2, input_mask2, segment_ids2 = convert_single_sentence(tokens_b, max_seq_length, tokenizer)
 
     # ex_index为 example的编号，从0开始
-    #返回前五个样本
+    # 返回前五个样本
     if ex_index < 5:
         tf.logging.info("*** Example ***")
         tf.logging.info("guid: %s" % (example.guid))
@@ -240,10 +235,10 @@ def convert_single_example(ex_index, example, label_list, max_seq_length,
         tf.logging.info("segment_ids1: %s" % " ".join([str(x) for x in segment_ids1]))
         tf.logging.info("segment_ids2: %s" % " ".join([str(x) for x in segment_ids2]))
         tf.logging.info("label: %s (id = %d)" % (example.label, label_id))
-    #input_ids:样本的word索引列表
-    #input_mask:掩码列表
-    #segment_ids:隔断句编号
-    #label_id:标签编号
+    # input_ids:样本的word索引列表
+    # input_mask:掩码列表
+    # segment_ids:隔断句编号
+    # label_id:标签编号
     feature = InputFeatures(
         input_ids1=input_ids1,
         input_mask1=input_mask1,
@@ -356,8 +351,6 @@ def _truncate_seq_pair(tokens_a, tokens_b, max_length):
             tokens_b.pop()
 
 
-
-
 def create_model(bert_config, is_training,
                  input_ids1, input_mask1, segment_ids1,
                  input_ids2, input_mask2, segment_ids2,
@@ -374,37 +367,37 @@ def create_model(bert_config, is_training,
         token_type_ids2=segment_ids2,
         use_one_hot_embeddings=use_one_hot_embeddings)
 
-    output1 = model.get_sequence_output1()#[batch_size, seq_length, embedding_size]
+    output1 = model.get_sequence_output1()  # [batch_size, seq_length, embedding_size]
     output2 = model.get_sequence_output2()
-    print(output1.shape,output2.shape)
+    print(output1.shape, output2.shape)
     # 接入lstm层
-    model_layer = SiameseLSTM(output1,output2,FLAGS.hidden_units,FLAGS.dropout_keep_prob)
+    model_layer = SiameseLSTM(output1, output2, FLAGS.hidden_units, FLAGS.dropout_keep_prob)
     output = model_layer.output
 
-    with tf.name_scope("out"):
-        intermediate_output = tf.layers.dense(output, 256, activation=tf.nn.relu)
-        if is_training:
-            intermediate_output = tf.nn.dropout(intermediate_output, keep_prob=0.9)
-        logits = tf.layers.dense(intermediate_output, 1)
-        logits = tf.reshape(logits, [-1])
-        predict = tf.nn.sigmoid(logits)
+    # with tf.name_scope("out"):
+    #     intermediate_output = tf.layers.dense(output, 256, activation=tf.nn.relu)
+    #     if is_training:
+    #         intermediate_output = tf.nn.dropout(intermediate_output, keep_prob=0.9)
+    #     logits = tf.layers.dense(intermediate_output, 1)
+    #     logits = tf.reshape(logits, [-1])
+    #     predict = tf.nn.sigmoid(logits)
     labels = tf.cast(labels, tf.float32)
 
-    # def contrastive_loss(y, d):
-    #     tmp = (1-y) * tf.square(d)
-    #     # tmp= tf.mul(y,tf.square(d))
-    #     tmp2 = y * tf.square(tf.maximum((1 - d), 0))
-    #     return tmp+tmp2
+    def contrastive_loss(y, d):
+        tmp = (1-y) * tf.square(d)
+        # tmp= tf.mul(y,tf.square(d))
+        tmp2 = y * tf.square(tf.maximum((1 - d), 0))
+        return tmp+tmp2
 
-    # with tf.name_scope("loss"):
-    #     print('label ,logits shape',labels.shape,distance.shape)
-    #     per_example_loss = contrastive_loss(labels, distance)#, FLAGS.batch_size)
-    #     loss=tf.reduce_sum(per_example_loss)
     with tf.name_scope("loss"):
-        per_example_loss = tf.nn.sigmoid_cross_entropy_with_logits(logits=logits, labels=labels)
-        loss = tf.reduce_mean(per_example_loss)
+        print('label ,logits shape',labels.shape,output.shape)
+        per_example_loss = contrastive_loss(labels, output)#, FLAGS.batch_size)
+        loss=tf.reduce_mean(per_example_loss)
+    # with tf.name_scope("loss"):
+    #     per_example_loss = tf.nn.sigmoid_cross_entropy_with_logits(logits=logits, labels=labels)
+    #     loss = tf.reduce_mean(per_example_loss)
 
-        return (loss, per_example_loss, logits, predict)
+        return (loss, per_example_loss, output)
     # else:
     #     #将两个output拼接
     #     output = tf.concat([tf.multiply(output1, output2), tf.abs(tf.subtract(output1, output2))], axis=-1)
@@ -425,9 +418,6 @@ def create_model(bert_config, is_training,
     #
     #
     #         return (loss, per_example_loss, logits, predict)
-
-
-
 
 
 def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
@@ -454,7 +444,7 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
 
         is_training = (mode == tf.estimator.ModeKeys.TRAIN)
 
-        (total_loss, per_example_loss, logits, probabilities) = create_model(
+        (total_loss, per_example_loss,  probabilities) = create_model(
             bert_config, is_training,
             input_ids1, input_mask1, segment_ids1,
             input_ids2, input_mask2, segment_ids2,
@@ -462,9 +452,7 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
             num_labels, use_one_hot_embeddings)
         print("total_loss::", total_loss)
         print("per_example_loss::", per_example_loss)
-        print("logits::", logits)
         print("probabilities::", probabilities)
-
 
         tvars = tf.trainable_variables()
 
@@ -482,15 +470,7 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
             else:
                 tf.train.init_from_checkpoint(init_checkpoint, assignment_map)
 
-        # tf.logging.info("**** Trainable Variables ****")
-        # for var in tvars:
-        #     init_string = ""
-        #     if var.name in initialized_variable_names:
-        #         init_string = ", *INIT_FROM_CKPT*"
-        #     tf.logging.info("  name = %s, shape = %s%s", var.name, var.shape,
-        #                     init_string)
 
-        output_spec = None
         if mode == tf.estimator.ModeKeys.TRAIN:
             predictions = tf.cast(probabilities > 0.5, tf.int32)
             accuracy = tf.metrics.accuracy(label_ids, predictions, name="accuracy")
@@ -502,7 +482,7 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
                 # 'accuracy':accuracy
             }
             logging_hook = tf.train.LoggingTensorHook(show_dict, every_n_iter=10)
-            #logging_hook = tf.train.LoggingTensorHook({"total_loss:": total_loss}, every_n_iter=10)
+            # logging_hook = tf.train.LoggingTensorHook({"total_loss:": total_loss}, every_n_iter=10)
             output_spec = tf.contrib.tpu.TPUEstimatorSpec(
                 mode=mode,
                 loss=total_loss,
@@ -674,7 +654,7 @@ def main(_):
     tpu_cluster_resolver = None
     if FLAGS.use_tpu and FLAGS.tpu_name:
         tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
-            FLAGS.tpu_name, zone=FLAGS .tpu_zone, project=FLAGS.gcp_project)
+            FLAGS.tpu_name, zone=FLAGS.tpu_zone, project=FLAGS.gcp_project)
 
     is_per_host = tf.contrib.tpu.InputPipelineConfig.PER_HOST_V2
     run_config = tf.contrib.tpu.RunConfig(
@@ -801,7 +781,13 @@ def main(_):
             is_training=False,
             drop_remainder=predict_drop_remainder)
 
-        result = estimator.predict(input_fn=predict_input_fn)
+        result = estimator.evaluate(input_fn=predict_input_fn)
+        output_predict_file = os.path.join(FLAGS.output_dir, "test_eval_results.txt")
+        with tf.gfile.GFile(output_predict_file, "w") as writer:
+            tf.logging.info("***** Predict results *****")
+            for key in sorted(result.keys()):
+                tf.logging.info("  %s = %s", key, str(result[key]))
+                writer.write("%s = %s\n" % (key, str(result[key])))
 
         output_predict_file = os.path.join(FLAGS.output_dir, "test_results.tsv")
         with tf.gfile.GFile(output_predict_file, "w") as writer:

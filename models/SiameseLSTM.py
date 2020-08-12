@@ -26,7 +26,8 @@ class SiameseLSTM(object):
             out1 = self.BiRNN(embedding1, dropout_keep_prob, "side1", hidden_units)
             out2 = self.BiRNN(embedding2, dropout_keep_prob, "side2",  hidden_units)
             print(out1.shape,out2.shape)
-            self.output = tf.concat([tf.multiply(out1, out2), tf.abs(tf.subtract(out1, out2))], axis=-1)
+            # self.output = tf.concat([tf.multiply(out1, out2), tf.abs(tf.subtract(out1, out2))], axis=-1)
+            self.output=self.cosine(out1,out2)
             print(self.output.shape)
             # self.distance = tf.sqrt(tf.reduce_sum(tf.square(tf.subtract(out1, out2)), 1, keep_dims=True))
             # self.distance = tf.div(self.distance,
@@ -90,17 +91,9 @@ class SiameseLSTM(object):
         print(outputs.shape)
         return  outputs
 
-    def get_cos_distance(self,X1, X2):
-        # calculate cos distance between two sets
-        # more similar more big
-        (k, n) = X1.shape
-        (m, n) = X2.shape
-        # 求模
-        X1_norm = tf.sqrt(tf.reduce_sum(tf.square(X1), axis=1))
-        X2_norm = tf.sqrt(tf.reduce_sum(tf.square(X2), axis=1))
-        # 内积
-        X1_X2 = tf.matmul(X1, tf.transpose(X2))
-        X1_X2_norm = tf.matmul(tf.reshape(X1_norm, [k, 1]), tf.reshape(X2_norm, [1, m]))
-        # 计算余弦距离
-        cos = X1_X2 / X1_X2_norm
-        return cos
+    def cosine(self,q, a):
+        pooled_len_1 = tf.sqrt(tf.reduce_sum(q * q, 1))
+        pooled_len_2 = tf.sqrt(tf.reduce_sum(a * a, 1))
+        pooled_mul_12 = tf.reduce_sum(q * a, 1)
+        score = tf.div(pooled_mul_12, pooled_len_1 * pooled_len_2 + 1e-8, name="scores")
+        return score

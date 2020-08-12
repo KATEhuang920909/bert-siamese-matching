@@ -54,14 +54,6 @@ tf.flags.DEFINE_integer("hidden_units",
                         "Number of hidden units (default:50)")
 
 # Training parameters
-tf.flags.DEFINE_integer("batch_size",
-                        256,
-                        "Batch Size (default: 64)")
-
-
-tf.flags.DEFINE_integer("num_epochs",
-                        300,
-                        "Number of training epochs (default: 200)")
 
 
 tf.flags.DEFINE_integer("evaluate_every",
@@ -127,7 +119,7 @@ flags.DEFINE_integer("eval_batch_size", 8, "Total batch size for eval.")
 
 flags.DEFINE_integer("predict_batch_size", 8, "Total batch size for predict.")
 
-flags.DEFINE_float("learning_rate", 5e-5, "The initial learning rate for Adam.")
+flags.DEFINE_float("learning_rate", 1e-5, "The initial learning rate for Adam.")
 
 flags.DEFINE_float("num_train_epochs", 10.0,
                    "Total number of training epochs to perform.")
